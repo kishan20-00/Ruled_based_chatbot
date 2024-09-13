@@ -6,7 +6,7 @@ app = Flask(__name__)
 CORS(app)
 
 # MongoDB Connection
-client = MongoClient("mongodb://localhost:27017/")
+client = MongoClient("mongodb+srv://Kishan:luka2000@cluster0.2g59arm.mongodb.net/")
 db = client["chatbot_db"]
 marks_collection = db["marks"]
 
@@ -28,33 +28,61 @@ def chat():
     if session['step'] == 1:
         session['name'] = message
         session['step'] = 2
-        return jsonify({'response': 'Hi, {}! Please provide your email.'.format(session['name'])})
+        return jsonify({'response': f'Hi, {session["name"]}! Please provide your email.'})
 
     # Step 2: Ask for Email
     elif session['step'] == 2:
         session['email'] = message
         session['step'] = 3
-        return jsonify({'response': 'Thanks, {}! Now please select your semester from 1-8.'.format(session['email']), 'options': list(range(1, 9))})
+        return jsonify({'response': f'Thanks, {session["name"]}! Now please select your semester from 1-8.', 'options': list(range(1, 9))})
 
     # Step 3: Get Semester
     elif session['step'] == 3:
         try:
             semester = int(message)
             if semester not in range(1, 9):
-                return jsonify({'response': 'Invalid semester. Please select a semester from 1 to 8.'})
+                # Invalid semester, reset and start from the beginning
+                session['step'] = 1
+                session['name'] = None
+                session['email'] = None
+                session['semester'] = None
+                return jsonify({'response': 'Invalid semester. Let\'s start again. What is your name?'})
 
             session['semester'] = semester
-            session['step'] = 4
 
             # Fetch the result from MongoDB
             results = marks_collection.find_one({'email': session['email'], 'semester': session['semester']})
 
             if results:
-                return jsonify({'response': 'Here are your results for semester {}: {}'.format(session['semester'], results['marks'])})
+                marks = results['marks']
+                formatted_marks = [f"{subject}: {marks[subject]}" for subject in marks]
+                # Return the results and then reset the session to start from the beginning
+                session['step'] = 1
+                session['name'] = None
+                session['email'] = None
+                session['semester'] = None
+                return jsonify({'response': f'Here are your results for semester {session["semester"]}:', 'marks': formatted_marks})
             else:
-                return jsonify({'response': 'No results found for {} in semester {}.'.format(session['email'], session['semester'])})
+                # No results found, reset and start from the beginning
+                session['step'] = 1
+                session['name'] = None
+                session['email'] = None
+                session['semester'] = None
+                return jsonify({'response': f'No results found for {session["email"]} in semester {session["semester"]}. Let\'s start again. What is your name?'})
         except ValueError:
-            return jsonify({'response': 'Please enter a valid number for the semester.'})
+            # Invalid input, reset and start from the beginning
+            session['step'] = 1
+            session['name'] = None
+            session['email'] = None
+            session['semester'] = None
+            return jsonify({'response': 'Invalid input. Let\'s start again. What is your name?'})
+
+    # Default response if none of the conditions match
+    session['step'] = 1
+    session['name'] = None
+    session['email'] = None
+    session['semester'] = None
+    return jsonify({'response': 'An error occurred. Let\'s start again. What is your name?'})
 
 if __name__ == '__main__':
     app.run(debug=True)
